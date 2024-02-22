@@ -1,0 +1,23 @@
+mkdir -p %{buildroot}%{_libdir}/security/%{name}
+
+# Remove backup file
+rm -rf src/*~
+cp -pr src/* %{buildroot}%{_libdir}/security/%{name}
+
+# Install facial recognition
+mkdir -p %{buildroot}%{_libdir}/security/%{name}/dlib-data
+cp -p src/dlib-data/*.dat %{buildroot}%{_libdir}/security/%{name}/dlib-data
+rm -fr %{buildroot}%{_libdir}/security/%{name}/dlib-data/{Readme.md,install.sh,.gitignore}
+
+# Add polkit rules
+mkdir -p %{buildroot}%{_datadir}/polkit-1/actions
+install -Dm 0644 fedora/*.policy %{buildroot}%{_datadir}/polkit-1/actions/
+
+# Add bash completion
+mkdir -p %{buildroot}%{_datadir}/bash-completion/completions
+install -Dm 644 autocomplete/%{name} %{buildroot}%{_datadir}/bash-completion/completions
+
+# Create an executable
+mkdir -p %{buildroot}%{_bindir}
+chmod +x %{buildroot}%{_libdir}/security/%{name}/cli.py
+ln -s %{_libdir}/security/%{name}/cli.py %{buildroot}%{_bindir}/%{name}
