@@ -7,7 +7,7 @@
 #
 Name     : howdy
 Version  : 2.6.1
-Release  : 1
+Release  : 2
 URL      : https://github.com/boltgolt/howdy/archive/v2.6.1/howdy-2.6.1.tar.gz
 Source0  : https://github.com/boltgolt/howdy/archive/v2.6.1/howdy-2.6.1.tar.gz
 Source1  : https://github.com/davisking/dlib-models/raw/master/dlib_face_recognition_resnet_model_v1.dat.bz2
@@ -79,7 +79,7 @@ export http_proxy=http://127.0.0.1:9/
 export https_proxy=http://127.0.0.1:9/
 export no_proxy=localhost,127.0.0.1,0.0.0.0
 export LANG=C.UTF-8
-export SOURCE_DATE_EPOCH=1708622390
+export SOURCE_DATE_EPOCH=1708649259
 export GCC_IGNORE_WERROR=1
 export AR=gcc-ar
 export RANLIB=gcc-ranlib
@@ -113,7 +113,7 @@ FFLAGS="$CLEAR_INTERMEDIATE_FFLAGS"
 FCFLAGS="$CLEAR_INTERMEDIATE_FCFLAGS"
 ASFLAGS="$CLEAR_INTERMEDIATE_ASFLAGS"
 LDFLAGS="$CLEAR_INTERMEDIATE_LDFLAGS"
-export SOURCE_DATE_EPOCH=1708622390
+export SOURCE_DATE_EPOCH=1708649259
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/usr/share/package-licenses/howdy
 cp %{_builddir}/howdy-%{version}/LICENSE %{buildroot}/usr/share/package-licenses/howdy/5acdde412debe91775066e8e79b5086b1c7d15d3 || :
