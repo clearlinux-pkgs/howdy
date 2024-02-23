@@ -1,0 +1,329 @@
+From 82631fc147f2a7f9ce00a3f9ceac341b3a3ac9fe Mon Sep 17 00:00:00 2001
+From: "Brett T. Warden" <brett.t.warden@intel.com>
+Date: Fri, 23 Feb 2024 10:44:13 -0800
+Subject: [PATCH] Stateless
+
+Instead of keeping a writeable config in /usr/lib64/security/howdy, keep
+it in /etc/howdy/config.ini. If it doesn't exist, prompt the user to run
+the config command once to create it, by copying from a reference copy
+in /usr/share/howdy.
+
+Move all data writes to /var/lib/howdy instead of under
+/usr/lib64/security/howdy, and create directories if they don't exist.
+---
+ autocomplete/howdy |  2 +-
+ src/cli/add.py     | 15 +++++++++++----
+ src/cli/clear.py   |  6 +++---
+ src/cli/config.py  |  7 ++++++-
+ src/cli/disable.py | 10 ++++++++--
+ src/cli/list.py    |  4 ++--
+ src/cli/remove.py  |  6 +++---
+ src/cli/snap.py    | 10 +++++++++-
+ src/cli/test.py    |  9 ++++++++-
+ src/compare.py     | 10 ++++++++--
+ src/pam.py         |  8 +++++++-
+ src/snapshot.py    |  5 +++--
+ 12 files changed, 69 insertions(+), 23 deletions(-)
+
+diff --git a/autocomplete/howdy b/autocomplete/howdy
+index d633f227bf22..7f829df58efe 100755
+--- a/autocomplete/howdy
++++ b/autocomplete/howdy
+@@ -20,7 +20,7 @@ _howdy() {
+ 			;;
+ 		# For disable, grab the current "disabled" config option and give the reverse
+ 		"disable")
+-			local status=$(cut -d'=' -f2 <<< $(cat /lib/security/howdy/config.ini | grep 'disabled =') | xargs echo -n)
++			local status=$(cut -d'=' -f2 <<< $([[ -f /etc/howdy/config.ini ]] && cat /etc/howdy/config.ini | grep 'disabled =') | xargs echo -n)
+ 
+ 			[ "$status" == "false" ] && COMPREPLY="true" || COMPREPLY="false"
+ 			return 0
+diff --git a/src/cli/add.py b/src/cli/add.py
+index 112eacd3c11e..a52f01ba1403 100644
+--- a/src/cli/add.py
++++ b/src/cli/add.py
+@@ -26,6 +26,7 @@ import cv2
+ 
+ # Get the absolute path to the current directory
+ path = os.path.abspath(__file__ + "/..")
++config_path = "/etc/howdy/config.ini"
+ 
+ # Test if at lest 1 of the data files is there and abort if it's not
+ if not os.path.isfile(path + "/../dlib-data/shape_predictor_5_face_landmarks.dat"):
+@@ -34,9 +35,15 @@ if not os.path.isfile(path + "/../dlib-data/shape_predictor_5_face_landmarks.dat
+ 	print("\tsudo ./install.sh\n")
+ 	sys.exit(1)
+ 
++# Test if config file exists; if not, prompt to create it
++if not os.path.isfile(config_path):
++    print("howdy is not configured. Please run the following command to set initial configuration:")
++    print("\n\tsudo howdy config\n")
++    sys.exit(1)
++
+ # Read config from disk
+ config = configparser.ConfigParser()
+-config.read(path + "/../config.ini")
++config.read(config_path)
+ 
+ use_cnn = config.getboolean("core", "use_cnn", fallback=False)
+ if use_cnn:
+@@ -49,14 +56,14 @@ face_encoder = dlib.face_recognition_model_v1(path + "/../dlib-data/dlib_face_re
+ 
+ user = builtins.howdy_user
+ # The permanent file to store the encoded model in
+-enc_file = path + "/../models/" + user + ".dat"
++enc_file = "/var/lib/howdy/models/" + user + ".dat"
+ # Known encodings
+ encodings = []
+ 
+ # Make the ./models folder if it doesn't already exist
+-if not os.path.exists(path + "/../models"):
++if not os.path.exists("/var/lib/howdy/models"):
+ 	print("No face model folder found, creating one")
+-	os.makedirs(path + "/../models")
++	os.makedirs("/var/lib/howdy/models")
+ 
+ # To try read a premade encodings file if it exists
+ try:
+diff --git a/src/cli/clear.py b/src/cli/clear.py
+index 817de48a7306..0c2a21562bd5 100644
+--- a/src/cli/clear.py
++++ b/src/cli/clear.py
+@@ -11,12 +11,12 @@ path = os.path.dirname(os.path.abspath(__file__))
+ user = builtins.howdy_user
+ 
+ # Check if the models folder is there
+-if not os.path.exists(path + "/../models"):
++if not os.path.exists("/var/lib/howdy/models"):
+ 	print("No models created yet, can't clear them if they don't exist")
+ 	sys.exit(1)
+ 
+ # Check if the user has a models file to delete
+-if not os.path.isfile(path + "/../models/" + user + ".dat"):
++if not os.path.isfile("/var/lib/howdy/models/" + user + ".dat"):
+ 	print(user + " has no models or they have been cleared already")
+ 	sys.exit(1)
+ 
+@@ -32,5 +32,5 @@ if not builtins.howdy_args.y:
+ 		sys.exit(1)
+ 
+ # Delete otherwise
+-os.remove(path + "/../models/" + user + ".dat")
++os.remove(path + "/var/lib/howdy/models/" + user + ".dat")
+ print("\nModels cleared")
+diff --git a/src/cli/config.py b/src/cli/config.py
+index 764833d60e21..e66a736cc005 100644
+--- a/src/cli/config.py
++++ b/src/cli/config.py
+@@ -16,5 +16,10 @@ if "EDITOR" in os.environ:
+ elif os.path.isfile("/etc/alternatives/editor"):
+ 	editor = "/etc/alternatives/editor"
+ 
++# Copy the sample config file to edit, if it doesn't already exist
++if not os.path.isfile("/etc/howdy/config.ini"):
++    subprocess.call(['mkdir', '/etc/howdy'])
++    subprocess.call(['cp', '/usr/share/howdy/config.ini', '/etc/howdy/config.ini'])
++
+ # Open the editor as a subprocess and fork it
+-subprocess.call([editor, os.path.dirname(os.path.realpath(__file__)) + "/../config.ini"])
++subprocess.call([editor, "/etc/howdy/config.ini"])
+diff --git a/src/cli/disable.py b/src/cli/disable.py
+index 5f15d5b83c1f..bbef8573b68c 100644
+--- a/src/cli/disable.py
++++ b/src/cli/disable.py
+@@ -8,7 +8,13 @@ import fileinput
+ import configparser
+ 
+ # Get the absolute filepath
+-config_path = os.path.dirname(os.path.abspath(__file__)) + "/../config.ini"
++config_path = "/etc/howdy/config.ini"
++
++# Test if config file exists; if not, prompt to create it
++if not os.path.isfile(config_path):
++    print("howdy is not configured. Please run the following command to set initial configuration:")
++    print("\n\tsudo howdy config\n")
++    sys.exit(1)
+ 
+ # Read config from disk
+ config = configparser.ConfigParser()
+@@ -39,7 +45,7 @@ for line in fileinput.input([config_path], inplace=1):
+ 	print(line.replace("disabled = " + config.get("core", "disabled"), "disabled = " + out_value), end="")
+ 
+ # Print what we just did
+-if builtins.howdy_args.argument == "1":
++if builtins.howdy_args.argument == "1" or builtins.howdy_args.argument.lower() == "true":
+ 	print("Howdy has been disabled")
+ else:
+ 	print("Howdy has been enabled")
+diff --git a/src/cli/list.py b/src/cli/list.py
+index fe05d6e522a5..ae2a4a26f355 100644
+--- a/src/cli/list.py
++++ b/src/cli/list.py
+@@ -12,13 +12,13 @@ path = os.path.dirname(os.path.realpath(__file__)) + "/.."
+ user = builtins.howdy_user
+ 
+ # Check if the models file has been created yet
+-if not os.path.exists(path + "/models"):
++if not os.path.exists("/var/lib/howdy/models"):
+ 	print("Face models have not been initialized yet, please run:")
+ 	print("\n\tsudo howdy -U " + user + " add\n")
+ 	sys.exit(1)
+ 
+ # Path to the models file
+-enc_file = path + "/models/" + user + ".dat"
++enc_file = "/var/lib/howdy/models/" + user + ".dat"
+ 
+ # Try to load the models file and abort if the user does not have it yet
+ try:
+diff --git a/src/cli/remove.py b/src/cli/remove.py
+index 45e20362a714..b4e29611e6c6 100644
+--- a/src/cli/remove.py
++++ b/src/cli/remove.py
+@@ -18,13 +18,13 @@ if builtins.howdy_args.argument is None:
+ 	sys.exit(1)
+ 
+ # Check if the models file has been created yet
+-if not os.path.exists(path + "/models"):
++if not os.path.exists("/var/lib/howdy/models"):
+ 	print("Face models have not been initialized yet, please run:")
+ 	print("\n\thowdy add\n")
+ 	sys.exit(1)
+ 
+ # Path to the models file
+-enc_file = path + "/models/" + user + ".dat"
++enc_file = "/var/lib/howdy/models/" + user + ".dat"
+ 
+ # Try to load the models file and abort if the user does not have it yet
+ try:
+@@ -65,7 +65,7 @@ if not found:
+ 
+ # Remove the entire file if this encoding is the only one
+ if len(encodings) == 1:
+-	os.remove(path + "/models/" + user + ".dat")
++	os.remove("/var/lib/howdy/models/" + user + ".dat")
+ 	print("Removed last model, howdy disabled for user")
+ else:
+ 	# A place holder to contain the encodings that will remain
+diff --git a/src/cli/snap.py b/src/cli/snap.py
+index 7dce8f59cded..73c7116f24a1 100644
+--- a/src/cli/snap.py
++++ b/src/cli/snap.py
+@@ -2,6 +2,7 @@
+ 
+ # Import required modules
+ import os
++import sys
+ import configparser
+ import datetime
+ import snapshot
+@@ -9,10 +10,17 @@ from recorders.video_capture import VideoCapture
+ 
+ # Get the absolute path to the current directory
+ path = os.path.abspath(__file__ + "/..")
++config_path = "/etc/howdy/config.ini"
++
++# Test if config file exists; if not, prompt to create it
++if not os.path.isfile(config_path):
++    print("howdy is not configured. Please run the following command to set initial configuration:")
++    print("\n\tsudo howdy config\n")
++    sys.exit(1)
+ 
+ # Read the config
+ config = configparser.ConfigParser()
+-config.read(path + "/../config.ini")
++config.read(config_path)
+ 
+ # Start video capture
+ video_capture = VideoCapture(config)
+diff --git a/src/cli/test.py b/src/cli/test.py
+index c62fcef67033..ed087f75847b 100644
+--- a/src/cli/test.py
++++ b/src/cli/test.py
+@@ -11,10 +11,17 @@ from recorders.video_capture import VideoCapture
+ 
+ # Get the absolute path to the current file
+ path = os.path.dirname(os.path.abspath(__file__))
++config_path = "/etc/howdy/config.ini"
++
++# Test if config file exists; if not, prompt to create it
++if not os.path.isfile(config_path):
++    print("howdy is not configured. Please run the following command to set initial configuration:")
++    print("\n\tsudo howdy config\n")
++    sys.exit(1)
+ 
+ # Read config from disk
+ config = configparser.ConfigParser()
+-config.read(path + "/../config.ini")
++config.read(config_path)
+ 
+ if config.get("video", "recording_plugin") != "opencv":
+ 	print("Howdy has been configured to use a recorder which doesn't support the test command yet")
+diff --git a/src/compare.py b/src/compare.py
+index d0ea5eac3751..02d0da4a3703 100644
+--- a/src/compare.py
++++ b/src/compare.py
+@@ -92,7 +92,7 @@ face_encoder = None
+ 
+ # Try to load the face model from the models folder
+ try:
+-	models = json.load(open(PATH + "/models/" + user + ".dat"))
++	models = json.load(open("/var/lib/howdy/models/" + user + ".dat"))
+ 
+ 	for model in models:
+ 		encodings += model["data"]
+@@ -103,9 +103,15 @@ except FileNotFoundError:
+ if len(models) < 1:
+ 	sys.exit(10)
+ 
++# Test if config file exists; if not, prompt to create it
++if not os.path.isfile("/etc/howdy/config.ini"):
++    print("howdy is not configured. Please run the following command to set initial configuration:")
++    print("\n\tsudo howdy config\n")
++    sys.exit(1)
++
+ # Read config from disk
+ config = configparser.ConfigParser()
+-config.read(PATH + "/config.ini")
++config.read("/etc/howdy/config.ini")
+ 
+ # Get all config values needed
+ use_cnn = config.getboolean("core", "use_cnn", fallback=False)
+diff --git a/src/pam.py b/src/pam.py
+index 08cccef04344..dacb2b3e2c93 100644
+--- a/src/pam.py
++++ b/src/pam.py
+@@ -9,9 +9,15 @@ import syslog
+ # pam-python is running python 2, so we use the old module here
+ import ConfigParser
+ 
++# Test if config file exists; if not, prompt to create it
++if not os.path.isfile("/etc/howdy/config.ini"):
++    print("howdy is not configured. Please run the following command to set initial configuration:")
++    print("\n\tsudo howdy config\n")
++    sys.exit(1)
++
+ # Read config from disk
+ config = ConfigParser.ConfigParser()
+-config.read(os.path.dirname(os.path.abspath(__file__)) + "/config.ini")
++config.read("/etc/howdy/config.ini")
+ 
+ 
+ def doAuth(pamh):
+diff --git a/src/snapshot.py b/src/snapshot.py
+index c853ffa60758..0c4ba88bcdd8 100644
+--- a/src/snapshot.py
++++ b/src/snapshot.py
+@@ -56,7 +56,8 @@ def generate(frames, text_lines):
+ 	# Generate a filename based on the current time
+ 	filename = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%S.jpg")
+ 	# Write the image to that file
+-	cv2.imwrite(abpath + "/snapshots/" + filename, snap)
++	os.makedirs("/var/lib/howdy/snapshots", exist_ok=True)
++	cv2.imwrite("/var/lib/howdy" + "/snapshots/" + filename, snap)
+ 
+ 	# Return the saved file location
+-	return abpath + "/snapshots/" + filename
++	return "/var/lib/howdy" + "/snapshots/" + filename
+-- 
+2.43.2
+

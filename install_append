@@ -2,6 +2,12 @@ mkdir -p %{buildroot}%{_libdir}/security/%{name}
 
 # Remove backup file
 rm -rf src/*~
+
+# Move reference config
+mkdir -p %{buildroot}/usr/share/howdy
+mv src/config.ini %{buildroot}/usr/share/howdy/
+
+# Install base files
 cp -pr src/* %{buildroot}%{_libdir}/security/%{name}
 
 # Install facial recognition

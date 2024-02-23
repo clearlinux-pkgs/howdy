@@ -7,7 +7,7 @@
 #
 Name     : howdy
 Version  : 2.6.1
-Release  : 3
+Release  : 4
 URL      : https://github.com/boltgolt/howdy/archive/v2.6.1/howdy-2.6.1.tar.gz
 Source0  : https://github.com/boltgolt/howdy/archive/v2.6.1/howdy-2.6.1.tar.gz
 Source1  : https://github.com/davisking/dlib-models/raw/master/dlib_face_recognition_resnet_model_v1.dat.bz2
@@ -23,6 +23,7 @@ Requires: dlib
 # Suppress stripping binaries
 %define __strip /bin/true
 %define debug_package %{nil}
+Patch1: stateless.patch
 
 %description
 Windows Hello™ style authentication for Linux. Use your built-in IR emitters and camera in combination with face recognition to prove who you are.
@@ -74,13 +75,14 @@ mkdir -p src/dlib-data
 cp -r %{_builddir}/mmod_human_face_detector.dat/* %{_builddir}/howdy-2.6.1/src/dlib-data
 mkdir -p src/dlib-data
 cp -r %{_builddir}/shape_predictor_5_face_landmarks.dat/* %{_builddir}/howdy-2.6.1/src/dlib-data
+%patch -P 1 -p1
 
 %build
 export http_proxy=http://127.0.0.1:9/
 export https_proxy=http://127.0.0.1:9/
 export no_proxy=localhost,127.0.0.1,0.0.0.0
 export LANG=C.UTF-8
-export SOURCE_DATE_EPOCH=1708710631
+export SOURCE_DATE_EPOCH=1708732276
 export GCC_IGNORE_WERROR=1
 export AR=gcc-ar
 export RANLIB=gcc-ranlib
@@ -114,7 +116,7 @@ FFLAGS="$CLEAR_INTERMEDIATE_FFLAGS"
 FCFLAGS="$CLEAR_INTERMEDIATE_FCFLAGS"
 ASFLAGS="$CLEAR_INTERMEDIATE_ASFLAGS"
 LDFLAGS="$CLEAR_INTERMEDIATE_LDFLAGS"
-export SOURCE_DATE_EPOCH=1708710631
+export SOURCE_DATE_EPOCH=1708732276
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/usr/share/package-licenses/howdy
 cp %{_builddir}/howdy-%{version}/LICENSE %{buildroot}/usr/share/package-licenses/howdy/5acdde412debe91775066e8e79b5086b1c7d15d3 || :
@@ -127,6 +129,12 @@ mkdir -p %{buildroot}%{_libdir}/security/%{name}
 
 # Remove backup file
 rm -rf src/*~
+
+# Move reference config
+mkdir -p %{buildroot}/usr/share/howdy
+mv src/config.ini %{buildroot}/usr/share/howdy/
+
+# Install base files
 cp -pr src/* %{buildroot}%{_libdir}/security/%{name}
 
 # Install facial recognition
@@ -161,7 +169,6 @@ ln -s %{_libdir}/security/%{name}/cli.py %{buildroot}%{_bindir}/%{name}
 /usr/lib64/security/howdy/cli/snap.py
 /usr/lib64/security/howdy/cli/test.py
 /usr/lib64/security/howdy/compare.py
-/usr/lib64/security/howdy/config.ini
 /usr/lib64/security/howdy/dlib-data/dlib_face_recognition_resnet_model_v1.dat
 /usr/lib64/security/howdy/dlib-data/mmod_human_face_detector.dat
 /usr/lib64/security/howdy/dlib-data/shape_predictor_5_face_landmarks.dat
@@ -182,6 +189,7 @@ ln -s %{_libdir}/security/%{name}/cli.py %{buildroot}%{_bindir}/%{name}
 %files data
 %defattr(-,root,root,-)
 /usr/share/bash-completion/completions/howdy
+/usr/share/howdy/config.ini
 /usr/share/polkit-1/actions/com.github.boltgolt.howdy.policy
 
 %files license
